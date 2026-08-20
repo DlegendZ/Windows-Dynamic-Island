@@ -33,6 +33,7 @@ public partial class IslandWindow : Window
 
         SourceInitialized += IslandWindow_SourceInitialized;
         Loaded += IslandWindow_Loaded;
+        Deactivated += IslandWindow_Deactivated;
     }
 
     public void AddModule(IIslandModule module)
@@ -106,6 +107,12 @@ public partial class IslandWindow : Window
             _stateMachine.Fire(IslandTrigger.EscapeOrClickOutside);
     }
 
+    private void IslandWindow_Deactivated(object? sender, EventArgs e)
+    {
+        if (_stateMachine.Current == IslandState.Expanded)
+            _stateMachine.Fire(IslandTrigger.EscapeOrClickOutside);
+    }
+
     private void ModuleTabStrip_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
         if (ModuleTabStrip.SelectedItem is IIslandModule module)
@@ -125,16 +132,16 @@ public partial class IslandWindow : Window
                 break;
 
             case IslandState.Peek:
-                if (_peekQueue.TryDequeue(out var peekEvent) && peekEvent is not null)
-                    PeekText.Text = peekEvent.Text;
-                else
-                    PeekText.Text = string.Empty;
+            {
+                var hasPeekEvent = _peekQueue.TryDequeue(out var peekEvent) && peekEvent is not null;
+                PeekText.Text = hasPeekEvent ? peekEvent!.Text : string.Empty;
                 PeekContent.Visibility = Visibility.Visible;
                 ExpandedPanel.Visibility = Visibility.Collapsed;
                 AnimateTo(PillBorder, 160, 36);
-                _peekTimer.Interval = TimeSpan.FromSeconds(3);
+                _peekTimer.Interval = hasPeekEvent ? peekEvent!.Duration : TimeSpan.FromSeconds(3);
                 _peekTimer.Start();
                 break;
+            }
 
             case IslandState.Expanded:
                 _peekTimer.Stop();
