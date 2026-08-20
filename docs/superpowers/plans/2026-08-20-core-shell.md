@@ -56,18 +56,12 @@ mkdir -p src/DynamicIsland.Core src/DynamicIsland tests/DynamicIsland.Core.Tests
     <ProjectReference Include="..\DynamicIsland.Core\DynamicIsland.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <COMReference Include="IWshRuntimeLibrary">
-      <Guid>{F935DC20-1CF0-11D0-ADB9-00C04FD58A0B}</Guid>
-      <VersionMajor>1</VersionMajor>
-      <VersionMinor>0</VersionMinor>
-      <Lcid>0</Lcid>
-      <WrapperTool>tlbimp</WrapperTool>
-      <Isolated>false</Isolated>
-      <EmbedInteropTypes>true</EmbedInteropTypes>
-    </COMReference>
+    <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
   </ItemGroup>
 </Project>
 ```
+
+> **Note:** No `COMReference` here. The cross-platform `dotnet build` MSBuild does not implement `ResolveComReference` (`MSB4803`) — that task only exists in the full-framework MSBuild shipped with Visual Studio, which this machine doesn't have configured for SDK-style projects. Task 10 uses late-bound COM (`Type.GetTypeFromProgID` + `dynamic`) instead of a design-time COM reference, which needs no MSBuild COM resolution at all and builds cleanly with the SDK CLI. `Microsoft.CSharp` is added here because it's required for the `dynamic` keyword to compile on .NET (Core) — it's not auto-referenced there the way it is on .NET Framework.
 
 `src/DynamicIsland/App.xaml`:
 
@@ -1305,19 +1299,21 @@ git commit -m "feat: add island window with Idle/Peek/Expanded states and animat
 
 ---
 
-## Task 10: Autostart shortcut writer (COM)
+## Task 10: Autostart shortcut writer (late-bound COM)
 
 **Files:**
 - Create: `src/DynamicIsland/WshShortcutWriter.cs`
 
-- [ ] **Step 1: Write the COM-backed shortcut writer**
+Uses late-bound COM (`Type.GetTypeFromProgID` + `dynamic`) against the built-in `WScript.Shell` automation object, not a design-time `COMReference`. The cross-platform `dotnet build` MSBuild does not implement `ResolveComReference` (`MSB4803`), so a static COM reference to `IWshRuntimeLibrary` cannot be resolved by the SDK CLI on this machine (or in most CI). Late binding sidesteps that entirely — `WScript.Shell` is registered on every Windows install, no type library import needed at build time.
+
+- [ ] **Step 1: Write the late-bound shortcut writer**
 
 `src/DynamicIsland/WshShortcutWriter.cs`:
 
 ```csharp
+using System;
 using System.IO;
 using DynamicIsland.Core;
-using IWshRuntimeLibrary;
 
 namespace DynamicIsland;
 
@@ -1325,8 +1321,11 @@ public sealed class WshShortcutWriter : IShortcutWriter
 {
     public void CreateShortcut(string shortcutPath, string targetPath)
     {
-        var shell = new WshShell();
-        var shortcut = (IWshShortcut)shell.CreateShortcut(shortcutPath);
+        var shellType = Type.GetTypeFromProgID("WScript.Shell")
+            ?? throw new InvalidOperationException("WScript.Shell COM component is not available on this system.");
+
+        dynamic shell = Activator.CreateInstance(shellType)!;
+        dynamic shortcut = shell.CreateShortcut(shortcutPath);
         shortcut.TargetPath = targetPath;
         shortcut.Save();
     }
@@ -1339,19 +1338,19 @@ public sealed class WshShortcutWriter : IShortcutWriter
 }
 ```
 
-- [ ] **Step 2: Build to verify the COM reference resolves**
+- [ ] **Step 2: Build to verify it compiles**
 
 ```bash
 dotnet build src/DynamicIsland
 ```
 
-Expected: 0 errors. If the COM reference fails to resolve, verify Windows Script Host is registered on the build machine (`regsvr32` is not required — the type library ships with Windows) and that the `COMReference` GUID in `DynamicIsland.csproj` matches Task 1 exactly.
+Expected: 0 errors. `dynamic` requires the `Microsoft.CSharp` package reference added to `DynamicIsland.csproj` in Task 1 — if this step fails with errors about the `dynamic` keyword or missing `Microsoft.CSharp.RuntimeBinder`, verify that package reference is present.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add src/DynamicIsland/WshShortcutWriter.cs
-git commit -m "feat: add Windows Script Host shortcut writer for autostart"
+git commit -m "feat: add late-bound WScript.Shell shortcut writer for autostart"
 ```
 
 ---
