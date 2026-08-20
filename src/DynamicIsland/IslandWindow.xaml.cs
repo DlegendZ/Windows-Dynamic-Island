@@ -44,8 +44,11 @@ public partial class IslandWindow : Window
 
     public void EnqueuePeekEvent(PeekEvent peekEvent)
     {
-        _peekQueue.Enqueue(peekEvent);
-        Dispatcher.Invoke(() => _stateMachine.Fire(IslandTrigger.PeekEventRequested));
+        Dispatcher.Invoke(() =>
+        {
+            _peekQueue.Enqueue(peekEvent);
+            _stateMachine.Fire(IslandTrigger.PeekEventRequested);
+        });
     }
 
     private void IslandWindow_SourceInitialized(object? sender, EventArgs e)
@@ -124,6 +127,8 @@ public partial class IslandWindow : Window
             case IslandState.Peek:
                 if (_peekQueue.TryDequeue(out var peekEvent) && peekEvent is not null)
                     PeekText.Text = peekEvent.Text;
+                else
+                    PeekText.Text = string.Empty;
                 PeekContent.Visibility = Visibility.Visible;
                 ExpandedPanel.Visibility = Visibility.Collapsed;
                 AnimateTo(PillBorder, 160, 36);

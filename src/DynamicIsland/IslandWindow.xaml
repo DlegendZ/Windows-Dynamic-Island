@@ -49,6 +49,7 @@
                          Height="40"
                          Background="Transparent"
                          BorderThickness="0"
+                         ItemsSource="{Binding Modules}"
                          SelectionChanged="ModuleTabStrip_SelectionChanged"
                          KeyboardNavigation.DirectionalNavigation="Cycle"
                          AutomationProperties.Name="Module tabs">
